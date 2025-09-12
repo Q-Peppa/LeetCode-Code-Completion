@@ -1,9 +1,10 @@
 // ==UserScript==
 // @name         LeetCode Monaco JS 原生补全增强 （支持 iframe + 缓存回退）
 // @namespace    http://tampermonkey.net/
-// @version      2025-09-09
-// @description  LeetCode Monaco JS 原生补全增强 （支持 iframe + 缓存回退）
+// @version      2025-09-12
+// @description  LeetCode Monaco JS 原生补全增强 （支持 iframe + 缓存回退） + JavaScript 新版本 esnext 全支持
 // @author       Peppa
+// @license      MIT
 // @match        https://leetcode.cn/problems/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=leetcode.cn
 // @grant        GM_log
