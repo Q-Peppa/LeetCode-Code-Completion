@@ -6,11 +6,12 @@
 // @author       Peppa
 // @match        https://leetcode.cn/problems/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=leetcode.cn
-// @grant        none
+// @grant        GM_log
+// @grant        GM_getValue
+// @grant        GM_setValue
 // ==/UserScript==
 
 
-var GM_log = console.log;
 const fallbacks = {
     "lib.dom.d.ts": `interface Document {
         getElementById(id: string): HTMLElement | null;
@@ -78,6 +79,73 @@ const customLibs = `
  declare const console: Console;
  declare const Array:  ArrayConstructor;
  declare const Map:  MapConstructor;
+ declare const _: _.LoDashStatic;
+ declare interface _.LoDashStatic {
+    chunk<T>(array: T[], size?: number): T[][];
+    compact<T>(array: T[]): T[];
+    concat<T>(array: T[], ...values: Array<T | T[]>): T[];
+    difference<T>(array: T[], ...values: T[][]): T[];
+    differenceBy<T>(array: T[], values: T[], iteratee: (value: T) => any): T[];
+    differenceWith<T>(array: T[], values: T[], comparator: (a: T, b: T) => boolean): T[];
+    drop<T>(array: T[], n?: number): T[];
+    dropRight<T>(array: T[], n?: number): T[];
+    dropRightWhile<T>(array: T[], predicate: (value: T) => boolean): T[];
+    dropWhile<T>(array: T[], predicate: (value: T) => boolean): T[];
+    fill<T>(array: T[], value: any, start?: number, end?: number): T[];
+    findIndex<T>(array: T[], predicate: (value: T) => boolean, fromIndex?: number): number;
+    findLastIndex<T>(array: T[], predicate: (value: T) => boolean, fromIndex?: number): number;
+    flatten<T>(array: Array<T | T[]>): T[];
+    flattenDeep<T>(array: any[]): T[];
+    flattenDepth(array: any[], depth?: number): any[];
+    fromPairs<T>(pairs: Array<[string, T]>): { [index: string]: T };
+    head<T>(array: T[]): T | undefined;
+    indexOf<T>(array: T[], value: T, fromIndex?: number): number;
+    initial<T>(array: T[]): T[];
+    intersection<T>(...arrays: T[][]): T[];
+    intersectionBy<T>(arrays: T[][], iteratee: (value: T) => any): T[];
+    intersectionWith<T>(arrays: T[][], comparator: (a: T, b: T) => boolean): T[];
+    join<T>(array: T[], separator?: string): string;
+    last<T>(array: T[]): T | undefined;
+    lastIndexOf<T>(array: T[], value: T, fromIndex?: number): number;
+    nth<T>(array: T[], n?: number): T | undefined;
+    pull<T>(array: T[], ...values: T[]): T[];
+    pullAll<T>(array: T[], values: T[]): T[];
+    pullAllBy<T>(array: T[], values: T[], iteratee: (value: T) => any): T[];
+    pullAllWith<T>(array: T[], values: T[], comparator: (a: T, b: T) => boolean): T[];
+    pullAt<T>(array: T[], ...indexes: number[]): T[];
+    remove<T>(array: T[], predicate: (value: T) => boolean): T[];
+    reverse<T>(array: T[]): T[];
+    slice<T>(array: T[], start?: number, end?: number): T[];
+    sortedIndex<T>(array: T[], value: T): number;
+    sortedIndexBy<T>(array: T[], value: T, iteratee: (value: T) => any): number;
+    sortedIndexOf<T>(array: T[], value: T): number;
+    sortedLastIndex<T>(array: T[], value: T): number;
+    sortedLastIndexBy<T>(array: T[], value: T, iteratee: (value: T) => any): number;
+    sortedLastIndexOf<T>(array: T[], value: T): number;
+    sortedUniq<T>(array: T[]): T[];
+    sortedUniqBy<T>(array: T[], iteratee: (value: T) => any): T[];
+    tail<T>(array: T[]): T[];
+    take<T>(array: T[], n?: number): T[];
+    takeRight<T>(array: T[], n?: number): T[];
+    takeRightWhile<T>(array: T[], predicate: (value: T) => boolean): T[];
+    takeWhile<T>(array: T[], predicate: (value: T) => boolean): T[];
+    union<T>(...arrays: T[][]): T[];
+    unionBy<T>(arrays: T[][], iteratee: (value: T) => any): T[];
+    unionWith<T>(arrays: T[][], comparator: (a: T, b: T) => boolean): T[];
+    uniq<T>(array: T[]): T[];
+    uniqBy<T>(array: T[], iteratee: (value: T) => any): T[];
+    uniqWith<T>(array: T[], comparator: (a: T, b: T) => boolean): T[];
+    unzip<T>(array: T[][]): T[][];
+    unzipWith<T, R>(array: T[][], iteratee: (...values: T[]) => R): R[];
+    without<T>(array: T[], ...values: T[]): T[];
+    xor<T>(...arrays: T[][]): T[];
+    xorBy<T>(arrays: T[][], iteratee: (value: T) => any): T[];
+    xorWith<T>(arrays: T[][], comparator: (a: T, b: T) => boolean): T[];
+    zip<T>(...arrays: T[][]): T[][];
+    zipObject(props: string[], values: any[]): { [index: string]: any };
+    zipObjectDeep(props: string[], values: any[]): { [index: string]: any };
+    zipWith<T, R>(arrays: T[][], iteratee: (...values: T[]) => R): R[];
+ }
 `;
 
 
@@ -122,7 +190,7 @@ const customLibs = `
             }
             const text = await res.text();
             try {
-                localStorage.setItem(CACHE_KEY_PREFIX + libName, text);
+                GM_setValue(CACHE_KEY_PREFIX + libName, text);
                 GM_log(`📤 缓存成功了 ${libName}`);
                 return text;
             } catch (e) {
@@ -139,15 +207,9 @@ const customLibs = `
         }
     }
 
-
-    function getCacheLib(libName = '') {
-        if (!localStorage) return null;
-        return localStorage.getItem(CACHE_KEY_PREFIX + libName);
-    }
-
     async function getLibContent(libName = '') {
         // 先检查缓存
-        const cache = getCacheLib(libName);
+        const cache = GM_getValue(CACHE_KEY_PREFIX + libName);
         if (cache) return cache;
 
         // 尝试从网络获取
