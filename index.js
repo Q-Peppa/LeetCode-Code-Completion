@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LeetCode Monaco JS 原生补全增强 （支持 iframe + 缓存回退）
-// @namespace    http://tampermonkey.net/
-// @version      2025-09-12
+// @namespace    https://github.com/Q-Peppa/LeetCode-Code-Completion
+// @version      2025-09-13
 // @description  LeetCode Monaco JS 原生补全增强 （支持 iframe + 缓存回退） + JavaScript 新版本 esnext 全支持
 // @author       Peppa
 // @license      MIT
@@ -12,6 +12,8 @@
 // @grant        GM_setValue
 // @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
+// @updateURL    https://raw.githubusercontent.com/Q-Peppa/LeetCode-Code-Completion/refs/heads/main/index.js
+// @downloadURL  https://raw.githubusercontent.com/Q-Peppa/LeetCode-Code-Completion/refs/heads/main/index.js
 // ==/UserScript==
 
 const LIBS = [
