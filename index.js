@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LeetCode Monaco JS 原生补全增强 （支持 iframe + 缓存回退）
 // @namespace    https://github.com/Q-Peppa/LeetCode-Code-Completion
-// @version      2025-09-13
+// @version      2026-03-27
 // @description  LeetCode Monaco JS 原生补全增强 （支持 iframe + 缓存回退） + JavaScript 新版本 esnext 全支持
 // @author       Peppa
 // @license      MIT
@@ -25,6 +25,7 @@ const LIBS = [
   "lib.es2024.object.d.ts",
   "lib.es2024.collection.d.ts",
   "lib.esnext.collection.d.ts",
+  "lib.esnext.iterator.d.ts",
 ];
 
 const fallbacks = {
@@ -89,7 +90,7 @@ const customLibs = `
  declare class ListNode {
   val: number;
   next: ListNode | null;
-  constructor(val?:number , next: ListNode | null) ;
+  constructor(val?: number, next?: ListNode | null);
  }
  interface LoDashStatic {
         map<T, U>(array: T[], callback: (value: T, index: number, array: T[]) => U): U[];
@@ -170,56 +171,81 @@ const customLibs = `
  }
  declare const _: LoDashStatic;
 `;
-
-var globalMonaco = null;
+var GM_log,GM_xmlhttpRequest,unsafeWindow,GM_setValue,GM_getValue,globalMonaco;
 
 (function () {
   "use strict";
 
   const TSC_VERSION = "5.9.2";
-  const CACHE_KEY_PREFIX = "LeetCode_monaco_V2";
+  const CACHE_KEY_PREFIX = `LeetCode_monaco_${TSC_VERSION}_`;
   const FETCH_TIMEOUT = 5000;
+  const MONACO_WAIT_TIMEOUT = 10000;
+  const MONACO_POLL_INTERVAL = 200;
   const U = `https://cdn.jsdelivr.net/npm/typescript@${TSC_VERSION}/lib/`;
+  const targetStates = new WeakMap();
+  const configuredMonacos = new WeakSet();
+  const editorListeners = new WeakSet();
+  const timerIds = [];
+  let observer = null;
+
+  function getCacheKey(libName = "") {
+    return CACHE_KEY_PREFIX + libName;
+  }
+
+  function getFallbackContent(libName = "") {
+    const fallback = fallbacks[libName] ?? "";
+    GM_log(`[Fallback] 📥 使用本地定义的模型: ${libName}`);
+    return fallback;
+  }
+
+  function stopWatching() {
+    if (observer) {
+      observer.disconnect();
+      observer = null;
+    }
+
+    timerIds.forEach((timerId) => clearTimeout(timerId));
+    timerIds.length = 0;
+  }
 
   async function getLibContent(libName = "") {
-    // 先检查缓存
-    const cache = GM_getValue(CACHE_KEY_PREFIX + libName);
+    const cacheKey = getCacheKey(libName);
+    const cache = GM_getValue(cacheKey);
     if (cache) {
       GM_log(`[Cache] 📦 命中缓存 ${libName}`);
       return cache;
     }
 
-    // 使用 GM_download 替代 fetch
     return new Promise((resolve) => {
       GM_log(`[Download] 🔍 下载 ${libName}`);
       GM_xmlhttpRequest({
         method: "GET",
         url: U + libName,
         onload(data) {
+          if (data.status < 200 || data.status >= 300 || !data.responseText) {
+            GM_log(`❌ 下载失败 ${libName}: HTTP ${data.status}`);
+            resolve(getFallbackContent(libName));
+            return;
+          }
+
           const text = data.responseText;
           try {
-            GM_setValue(CACHE_KEY_PREFIX + libName, text);
+            GM_setValue(cacheKey, text);
             GM_log(`📤 缓存成功了 ${libName}`);
             resolve(text);
           } catch (e) {
             GM_log(`⚠️ 缓存失败了 ${libName}: ${e.message}`);
-            resolve(text); // 即使缓存失败，也返回内容
+            resolve(text);
           }
         },
         onerror(error) {
-          GM_log(`❌ 下载失败 ${libName}: ${error.message}`);
-          // 返回回退内容
-          const fallback = fallbacks[libName] ?? "";
-          GM_log(`[Fallback] 📥 使用本地定义的模型: ${libName}`);
-          resolve(fallback);
+          GM_log(`❌ 下载失败 ${libName}: ${error?.message ?? "unknown"}`);
+          resolve(getFallbackContent(libName));
         },
         timeout: FETCH_TIMEOUT,
         ontimeout: () => {
           GM_log(`❌ 获取 ${libName} 超时`);
-          // 获取回退内容
-          const fallback = fallbacks[libName] ?? "";
-          GM_log(`[Fallback] 📥 使用本地定义的模型: ${libName}`);
-          resolve(fallback);
+          resolve(getFallbackContent(libName));
         },
       });
     });
@@ -227,149 +253,194 @@ var globalMonaco = null;
 
   function waitForMonaco(target = unsafeWindow) {
     return new Promise((resolve) => {
+      let done = false;
+      let intervalId = null;
+      let timeoutId = null;
+
+      const finish = (value) => {
+        if (done) return;
+        done = true;
+        if (intervalId) clearInterval(intervalId);
+        if (timeoutId) clearTimeout(timeoutId);
+        resolve(value);
+      };
+
       const check = () => {
         if (
-          target.monaco &&
-          target.monaco.languages?.typescript &&
-          target.monaco.editor &&
-          target.monaco.editor.createModel
+          target.monaco?.languages?.typescript &&
+          target.monaco?.editor?.createModel
         ) {
-          resolve(target.monaco);
+          finish(target.monaco);
           return true;
         }
         return false;
       };
 
-      // Check immediately
       if (check()) return;
 
-      const interval = setInterval(() => {
-        if (check()) {
-          clearInterval(interval);
-        }
-      }, 200);
+      intervalId = setInterval(check, MONACO_POLL_INTERVAL);
 
-      // Extend timeout to 10 seconds
-      setTimeout(() => {
-        clearInterval(interval);
-        resolve(null);
-      }, 10000);
+      timeoutId = setTimeout(() => {
+        finish(null);
+      }, MONACO_WAIT_TIMEOUT);
     });
   }
 
-  async function enableJSCompletion(target = unsafeWindow) {
-    try {
-      GM_log("🔍 等待Monaco编辑器加载...");
-      globalMonaco = await waitForMonaco(target);
-      if (!globalMonaco) {
-        GM_log("❌ 失败：未找到Monaco编辑器");
-        return;
-      }
-    } catch (e) {
-      GM_log("❌ 初始化出错：" + e.message);
+  async function loadAllLibs() {
+    return Promise.all(
+      LIBS.map(async (libName) => {
+        try {
+          return [libName, await getLibContent(libName)];
+        } catch (e) {
+          GM_log(`❌ 处理 ${libName} 时出错: ${e.message}`);
+          return [libName, ""];
+        }
+      })
+    );
+  }
+
+  function updateEditorOptions(monaco) {
+    monaco.editor.getEditors?.().forEach((editor) => {
+      editor.updateOptions(options);
+    });
+
+    if (editorListeners.has(monaco)) {
       return;
     }
 
-    GM_log("🔧 开始配置语言服务", globalMonaco);
-    const jsDefaults = globalMonaco.languages.typescript.javascriptDefaults;
-
-    // 添加自定义类型（这是基础类型，先加载）
-    jsDefaults.addExtraLib(customLibs.trim(), "ts:custom-types.d.ts");
-
-    jsDefaults.setDiagnosticsOptions({
-      noSuggestionDiagnostics: false,
-      noSyntaxValidation: false,
-      noSemanticValidation: false,
+    monaco.editor.onDidCreateEditor((editor) => {
+      editor.updateOptions(options);
     });
+    editorListeners.add(monaco);
+  }
 
-    jsDefaults.setCompilerOptions({
-      allowJs: true,
-      allowNonTsExtensions: true,
-      target: 99,
-      checkJs: true,
-      strict: true,
-      noImplicitAny: true,
-      noEmit: true,
-    });
+  async function configureMonaco(monaco) {
+    if (configuredMonacos.has(monaco)) {
+      updateEditorOptions(monaco);
+      return true;
+    }
 
-    // 按顺序加载类型定义，确保依赖正确
-    for (const libName of LIBS) {
-      try {
-        const content = await getLibContent(libName);
+    GM_log("🔧 开始配置语言服务");
+    const jsDefaults = monaco.languages?.typescript?.javascriptDefaults;
+    if (!jsDefaults) {
+      return false;
+    }
+
+    configuredMonacos.add(monaco);
+
+    try {
+      globalMonaco = monaco;
+      jsDefaults.addExtraLib(customLibs.trim(), "ts:custom-types.d.ts");
+
+      jsDefaults.setDiagnosticsOptions({
+        noSuggestionDiagnostics: false,
+        noSyntaxValidation: false,
+        noSemanticValidation: false,
+      });
+
+      jsDefaults.setCompilerOptions({
+        allowJs: true,
+        allowNonTsExtensions: true,
+        target: monaco.languages.typescript.ScriptTarget?.ESNext ?? 99,
+        noImplicitAny: true,
+        noEmit: true,
+      });
+
+      const libEntries = await loadAllLibs();
+      for (const [libName, content] of libEntries) {
         if (content) {
-          const uri = `ts:${libName}`;
-          jsDefaults.addExtraLib(content, uri);
+          jsDefaults.addExtraLib(content, `ts:${libName}`);
           GM_log(`✅ 加载完成: ${libName}`);
         } else {
           GM_log(`❌ 无法获取: ${libName}`);
         }
-      } catch (e) {
-        GM_log(`❌ 处理 ${libName} 时出错: ${e.message}`);
       }
+
+      updateEditorOptions(monaco);
+      jsDefaults.setEagerModelSync(true);
+      jsDefaults.setDiagnosticsOptions(jsDefaults.getDiagnosticsOptions());
+
+      GM_log(
+        "✅【LeetCode 补全代码】 全部的功能已经就绪、试试输入 const ans = [], ans. 有没有补全 ~"
+      );
+      return true;
+    } catch (e) {
+      configuredMonacos.delete(monaco);
+      throw e;
+    }
+  }
+
+  async function enableJSCompletion(target = unsafeWindow) {
+    const currentState = targetStates.get(target);
+    if (currentState === "configuring" || currentState === "configured") {
+      return currentState === "configured";
     }
 
-    // 更新现有编辑器选项
-    globalMonaco.editor.getEditors?.().forEach((editor) => {
-      editor.updateOptions({ ...options });
-    });
+    targetStates.set(target, "configuring");
 
-    // 为新创建的编辑器设置选项
-    globalMonaco.editor.onDidCreateEditor((editor) => {
-      editor.updateOptions({ ...options });
-    });
+    try {
+      GM_log("🔍 等待Monaco编辑器加载...");
+      const monaco = await waitForMonaco(target);
+      if (!monaco) {
+        GM_log("❌ 失败：未找到Monaco编辑器");
+        targetStates.delete(target);
+        return false;
+      }
 
-    // 最后启用模型同步
-    jsDefaults.setEagerModelSync(true);
+      const configured = await configureMonaco(monaco);
+      if (!configured) {
+        targetStates.delete(target);
+        return false;
+      }
 
-    // 强制刷新语言服务
-    globalMonaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions(
-      globalMonaco.languages.typescript.javascriptDefaults.getDiagnosticsOptions()
-    );
-
-    GM_log(
-      "✅【LeetCode 补全代码】 全部的功能已经就绪、试试输入 const ans = [], ans. 有没有补全 ~"
-    );
+      targetStates.set(target, "configured");
+      stopWatching();
+      return true;
+    } catch (e) {
+      GM_log("❌ 初始化出错：" + e.message);
+      targetStates.delete(target);
+      return false;
+    }
   }
 
   function detectMonacoInPage() {
-    // 检查主页面
-    if (document?.querySelector(".monaco-editor") && !globalMonaco) {
+    let found = false;
+
+    if (document?.querySelector(".monaco-editor")) {
       GM_log("发现主页面含有 Monaco！");
-      enableJSCompletion(unsafeWindow);
-      return true;
+      found = true;
+      void enableJSCompletion(unsafeWindow);
     }
 
-    // 检查所有iframe
     const iframes = document.querySelectorAll("iframe");
     for (const iframe of iframes) {
       try {
         const doc = iframe.contentDocument;
         if (doc && doc.querySelector(".monaco-editor")) {
           GM_log("发现 IFrame 页面含有 Monaco！");
-          enableJSCompletion(iframe.contentWindow);
-          return true;
+          found = true;
+          void enableJSCompletion(iframe.contentWindow);
         }
       } catch (e) {
-        // 跨域访问会抛出异常，忽略
         GM_log("检查iframe时出错（可能是跨域）：" + e.message);
       }
     }
 
-    return false;
+    return found;
   }
   GM_log("🚀 【LeetCode 补全代码】 插件准备加载了~");
 
-  const observer = new MutationObserver(() => {
-    if (detectMonacoInPage()) {
-      observer.disconnect();
-    }
+  observer = new MutationObserver(() => {
+    detectMonacoInPage();
   });
 
   observer.observe(document, { childList: true, subtree: true });
 
-  // 多次检查机制，提高成功率
   const checkTimes = [500, 1000, 2000, 3000];
   checkTimes.forEach((delay) => {
-    setTimeout(detectMonacoInPage, delay);
+    const timerId = setTimeout(detectMonacoInPage, delay);
+    timerIds.push(timerId);
   });
+
+  detectMonacoInPage();
 })();
