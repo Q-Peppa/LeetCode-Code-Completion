@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         LeetCode Monaco JS 原生补全增强 （支持 iframe + 缓存回退）
 // @namespace    https://github.com/Q-Peppa/LeetCode-Code-Completion
-// @version      2026-03-27
+// @version      2026-03-28
 // @description  LeetCode Monaco JS 原生补全增强 （支持 iframe + 缓存回退） + JavaScript 新版本 esnext 全支持
 // @author       Peppa
 // @license      MIT
