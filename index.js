@@ -39,18 +39,119 @@ const fallbacks = {
         forEach(callbackfn: (value: T, index: number, array: T[]) => void, thisArg?: any): void;
         map<U>(callbackfn: (value: T, index: number, array: T[]) => U, thisArg?: any): U[];
         filter(callbackfn: (value: T, index: number, array: T[]) => boolean, thisArg?: any): T[];
+        reduce<U>(callbackfn: (previousValue: U, currentValue: T, currentIndex: number, array: T[]) => U, initialValue: U): U;
+        find(predicate: (value: T, index: number, obj: T[]) => boolean, thisArg?: any): T | undefined;
+        findIndex(predicate: (value: T, index: number, obj: T[]) => boolean, thisArg?: any): number;
+        includes(searchElement: T, fromIndex?: number): boolean;
+        slice(start?: number, end?: number): T[];
+        splice(start: number, deleteCount?: number, ...items: T[]): T[];
+        push(...items: T[]): number;
+        pop(): T | undefined;
+        shift(): T | undefined;
+        unshift(...items: T[]): number;
+        concat(...items: ConcatArray<T>[]): T[];
+        join(separator?: string): string;
+        reverse(): T[];
+        sort(compareFn?: (a: T, b: T) => number): T[];
+        every(predicate: (value: T, index: number, array: T[]) => boolean, thisArg?: any): boolean;
+        some(predicate: (value: T, index: number, array: T[]) => boolean, thisArg?: any): boolean;
+        indexOf(searchElement: T, fromIndex?: number): number;
+        lastIndexOf(searchElement: T, fromIndex?: number): number;
+        fill(value: T, start?: number, end?: number): T[];
+        length: number;
+        [n: number]: T;
     }`,
   "lib.es2015.core.d.ts": `interface Promise<T> {
         then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): Promise<TResult1 | TResult2>;
+        catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): Promise<T | TResult>;
+        finally(onfinally?: (() => void) | undefined | null): Promise<T>;
+    }
+    interface PromiseConstructor {
+        resolve<T>(value: T | PromiseLike<T>): Promise<T>;
+        reject<T = never>(reason?: any): Promise<T>;
+        all<T>(values: Iterable<T | PromiseLike<T>>): Promise<T[]>;
+        race<T>(values: Iterable<T | PromiseLike<T>>): Promise<T>;
+    }
+    declare var Promise: PromiseConstructor;
+    interface String {
+        includes(searchString: string, position?: number): boolean;
+        startsWith(searchString: string, position?: number): boolean;
+        endsWith(searchString: string, endPosition?: number): boolean;
+        repeat(count: number): string;
     }`,
   "lib.es2015.collection.d.ts": `interface Map<K, V> {
         get(key: K): V | undefined;
         set(key: K, value: V): this;
         has(key: K): boolean;
         delete(key: K): boolean;
+        clear(): void;
+        readonly size: number;
+        forEach(callbackfn: (value: V, key: K, map: Map<K, V>) => void, thisArg?: any): void;
+        keys(): IterableIterator<K>;
+        values(): IterableIterator<V>;
+        entries(): IterableIterator<[K, V]>;
+    }
+    interface MapConstructor {
+        new <K, V>(entries?: readonly (readonly [K, V])[] | null): Map<K, V>;
+    }
+    declare var Map: MapConstructor;
+    interface Set<T> {
+        add(value: T): this;
+        has(value: T): boolean;
+        delete(value: T): boolean;
+        clear(): void;
+        readonly size: number;
+        forEach(callbackfn: (value: T, value2: T, set: Set<T>) => void, thisArg?: any): void;
+        keys(): IterableIterator<T>;
+        values(): IterableIterator<T>;
+        entries(): IterableIterator<[T, T]>;
+    }
+    interface SetConstructor {
+        new <T>(values?: readonly T[] | null): Set<T>;
+    }
+    declare var Set: SetConstructor;
+    interface WeakMap<K extends object, V> {
+        get(key: K): V | undefined;
+        set(key: K, value: V): this;
+        has(key: K): boolean;
+        delete(key: K): boolean;
+    }
+    interface WeakSet<T extends object> {
+        add(value: T): this;
+        has(value: T): boolean;
+        delete(value: T): boolean;
+    }`,
+  "lib.es2023.array.d.ts": `interface Array<T> {
+        findLast(predicate: (value: T, index: number, obj: T[]) => unknown, thisArg?: any): T | undefined;
+        findLastIndex(predicate: (value: T, index: number, obj: T[]) => unknown, thisArg?: any): number;
+        toReversed(): T[];
+        toSorted(compareFn?: (a: T, b: T) => number): T[];
+        toSpliced(start: number, deleteCount?: number, ...items: T[]): T[];
+        with(index: number, value: T): T[];
+    }`,
+  "lib.es2024.object.d.ts": `interface ObjectConstructor {
+        groupBy<T, K extends PropertyKey>(items: Iterable<T>, callbackfn: (value: T, index: number) => K): Partial<Record<K, T[]>>;
+    }`,
+  "lib.es2024.collection.d.ts": `interface Map<K, V> {
+        groupBy<T, K>(items: Iterable<T>, callbackfn: (value: T, index: number) => K): Map<K, T[]>;
+    }`,
+  "lib.esnext.collection.d.ts": `interface Map<K, V> {
+        emplace(key: K, handler: { insert(key: K, map: Map<K, V>): V; update(key: K, value: V, map: Map<K, V>): V; }): V;
     }`,
   "lib.esnext.iterator.d.ts": `interface Iterator<T> {
         next(value?: any): IteratorResult<T>;
+        return?(value?: any): IteratorResult<T>;
+        throw?(e?: any): IteratorResult<T>;
+    }
+    interface IteratorResult<T, TReturn = any> {
+        done: boolean;
+        value: TReturn extends undefined ? T : T | TReturn;
+    }
+    interface Iterable<T> {
+        [Symbol.iterator](): Iterator<T>;
+    }
+    interface IterableIterator<T> extends Iterator<T> {
+        [Symbol.iterator](): IterableIterator<T>;
     }`,
 };
 const options = {
@@ -171,17 +272,23 @@ const customLibs = `
  }
  declare const _: LoDashStatic;
 `;
-var GM_log,GM_xmlhttpRequest,unsafeWindow,GM_setValue,GM_getValue,globalMonaco;
+var globalMonaco;
 
 (function () {
   "use strict";
 
   const TSC_VERSION = "5.9.2";
   const CACHE_KEY_PREFIX = `LeetCode_monaco_${TSC_VERSION}_`;
+  const CACHE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7天过期
   const FETCH_TIMEOUT = 5000;
   const MONACO_WAIT_TIMEOUT = 10000;
   const MONACO_POLL_INTERVAL = 200;
-  const U = `https://cdn.jsdelivr.net/npm/typescript@${TSC_VERSION}/lib/`;
+  const CDN_SOURCES = [
+    `https://cdn.jsdelivr.net/npm/typescript@${TSC_VERSION}/lib/`,
+    `https://unpkg.com/typescript@${TSC_VERSION}/lib/`,
+    `https://cdnjs.cloudflare.com/ajax/libs/typescript/${TSC_VERSION}/lib/`,
+  ];
+  let currentCDNIndex = 0;
   const targetStates = new WeakMap();
   const configuredMonacos = new WeakSet();
   const editorListeners = new WeakSet();
@@ -190,6 +297,17 @@ var GM_log,GM_xmlhttpRequest,unsafeWindow,GM_setValue,GM_getValue,globalMonaco;
 
   function getCacheKey(libName = "") {
     return CACHE_KEY_PREFIX + libName;
+  }
+
+  function getCacheTimestampKey(libName = "") {
+    return CACHE_KEY_PREFIX + libName + "_timestamp";
+  }
+
+  function isCacheExpired(libName = "") {
+    const timestampKey = getCacheTimestampKey(libName);
+    const timestamp = GM_getValue(timestampKey);
+    if (!timestamp) return true;
+    return Date.now() - timestamp > CACHE_EXPIRY_MS;
   }
 
   function getFallbackContent(libName = "") {
@@ -211,44 +329,66 @@ var GM_log,GM_xmlhttpRequest,unsafeWindow,GM_setValue,GM_getValue,globalMonaco;
   async function getLibContent(libName = "") {
     const cacheKey = getCacheKey(libName);
     const cache = GM_getValue(cacheKey);
-    if (cache) {
+    if (cache && !isCacheExpired(libName)) {
       GM_log(`[Cache] 📦 命中缓存 ${libName}`);
       return cache;
     }
 
-    return new Promise((resolve) => {
-      GM_log(`[Download] 🔍 下载 ${libName}`);
-      GM_xmlhttpRequest({
-        method: "GET",
-        url: U + libName,
-        onload(data) {
-          if (data.status < 200 || data.status >= 300 || !data.responseText) {
-            GM_log(`❌ 下载失败 ${libName}: HTTP ${data.status}`);
-            resolve(getFallbackContent(libName));
-            return;
-          }
+    if (cache && isCacheExpired(libName)) {
+      GM_log(`[Cache] ⏰ 缓存已过期 ${libName}，重新下载`);
+    }
 
-          const text = data.responseText;
-          try {
-            GM_setValue(cacheKey, text);
-            GM_log(`📤 缓存成功了 ${libName}`);
-            resolve(text);
-          } catch (e) {
-            GM_log(`⚠️ 缓存失败了 ${libName}: ${e.message}`);
-            resolve(text);
-          }
-        },
-        onerror(error) {
-          GM_log(`❌ 下载失败 ${libName}: ${error?.message ?? "unknown"}`);
-          resolve(getFallbackContent(libName));
-        },
-        timeout: FETCH_TIMEOUT,
-        ontimeout: () => {
-          GM_log(`❌ 获取 ${libName} 超时`);
-          resolve(getFallbackContent(libName));
-        },
+    const fetchFromCDN = (cdnUrl, cdnIndex) => {
+      return new Promise((resolve, reject) => {
+        GM_log(`[Download] 🔍 从 ${cdnUrl} 下载 ${libName}`);
+        GM_xmlhttpRequest({
+          method: "GET",
+          url: cdnUrl + libName,
+          onload(data) {
+            if (data.status < 200 || data.status >= 300 || !data.responseText) {
+              GM_log(`❌ 下载失败 ${libName}: HTTP ${data.status}`);
+              reject(new Error(`HTTP ${data.status}`));
+              return;
+            }
+            resolve(data.responseText);
+          },
+          onerror(error) {
+            GM_log(`❌ 下载失败 ${libName}: ${error?.message ?? "unknown"}`);
+            reject(error);
+          },
+          timeout: FETCH_TIMEOUT,
+          ontimeout: () => {
+            GM_log(`❌ 获取 ${libName} 超时`);
+            reject(new Error("timeout"));
+          },
+        });
       });
-    });
+    };
+
+    for (let i = 0; i < CDN_SOURCES.length; i++) {
+      const cdnIndex = (currentCDNIndex + i) % CDN_SOURCES.length;
+      try {
+        const text = await fetchFromCDN(CDN_SOURCES[cdnIndex], cdnIndex);
+        try {
+          GM_setValue(cacheKey, text);
+          GM_setValue(getCacheTimestampKey(libName), Date.now());
+          GM_log(`📤 缓存成功了 ${libName}`);
+        } catch (e) {
+          GM_log(`⚠️ 缓存失败了 ${libName}: ${e.message}`);
+        }
+        currentCDNIndex = cdnIndex;
+        return text;
+      } catch (e) {
+        GM_log(`⚠️ CDN ${cdnIndex + 1} 失败，尝试下一个`);
+      }
+    }
+
+    GM_log(`❌ 所有CDN源失败`);
+    if (cache) {
+      GM_log(`⚠️ 使用过期缓存 ${libName}`);
+      return cache;
+    }
+    return getFallbackContent(libName);
   }
 
   function waitForMonaco(target = unsafeWindow) {
@@ -384,12 +524,14 @@ var GM_log,GM_xmlhttpRequest,unsafeWindow,GM_setValue,GM_getValue,globalMonaco;
       if (!monaco) {
         GM_log("❌ 失败：未找到Monaco编辑器");
         targetStates.delete(target);
+        stopWatching();
         return false;
       }
 
       const configured = await configureMonaco(monaco);
       if (!configured) {
         targetStates.delete(target);
+        stopWatching();
         return false;
       }
 
@@ -399,6 +541,7 @@ var GM_log,GM_xmlhttpRequest,unsafeWindow,GM_setValue,GM_getValue,globalMonaco;
     } catch (e) {
       GM_log("❌ 初始化出错：" + e.message);
       targetStates.delete(target);
+      stopWatching();
       return false;
     }
   }
