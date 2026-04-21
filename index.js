@@ -7,6 +7,7 @@
 // @license      MIT
 // @match        https://leetcode.cn/problems/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=leetcode.cn
+// @run-at       document-end
 // @grant        GM_log
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -132,7 +133,7 @@ const fallbacks = {
   "lib.es2024.object.d.ts": `interface ObjectConstructor {
         groupBy<T, K extends PropertyKey>(items: Iterable<T>, callbackfn: (value: T, index: number) => K): Partial<Record<K, T[]>>;
     }`,
-  "lib.es2024.collection.d.ts": `interface Map<K, V> {
+  "lib.es2024.collection.d.ts": `interface MapConstructor {
         groupBy<T, K>(items: Iterable<T>, callbackfn: (value: T, index: number) => K): Map<K, T[]>;
     }`,
   "lib.esnext.collection.d.ts": `interface Map<K, V> {
@@ -179,7 +180,7 @@ const options = {
   scrollBeyondLastLine: false,
 };
 const customLibs = `
- declare class PrioriQueue<T>{
+ declare class PriorityQueue<T>{
    private data: T[];
    constructor(compare?:(a: T, b: T) => number);
    enqueue(data: T): void;
@@ -272,8 +273,6 @@ const customLibs = `
  }
  declare const _: LoDashStatic;
 `;
-var globalMonaco;
-
 (function () {
   "use strict";
 
@@ -331,14 +330,16 @@ var globalMonaco;
     const cache = GM_getValue(cacheKey);
     if (cache && !isCacheExpired(libName)) {
       GM_log(`[Cache] 📦 命中缓存 ${libName}`);
-      return cache;
+      return { content: cache, cdnIndex: -1 };
     }
 
     if (cache && isCacheExpired(libName)) {
       GM_log(`[Cache] ⏰ 缓存已过期 ${libName}，重新下载`);
     }
 
-    const fetchFromCDN = (cdnUrl, cdnIndex) => {
+    const startIndex = currentCDNIndex;
+
+    const fetchFromCDN = (cdnUrl) => {
       return new Promise((resolve, reject) => {
         GM_log(`[Download] 🔍 从 ${cdnUrl} 下载 ${libName}`);
         GM_xmlhttpRequest({
@@ -366,9 +367,9 @@ var globalMonaco;
     };
 
     for (let i = 0; i < CDN_SOURCES.length; i++) {
-      const cdnIndex = (currentCDNIndex + i) % CDN_SOURCES.length;
+      const cdnIndex = (startIndex + i) % CDN_SOURCES.length;
       try {
-        const text = await fetchFromCDN(CDN_SOURCES[cdnIndex], cdnIndex);
+        const text = await fetchFromCDN(CDN_SOURCES[cdnIndex]);
         try {
           GM_setValue(cacheKey, text);
           GM_setValue(getCacheTimestampKey(libName), Date.now());
@@ -376,8 +377,7 @@ var globalMonaco;
         } catch (e) {
           GM_log(`⚠️ 缓存失败了 ${libName}: ${e.message}`);
         }
-        currentCDNIndex = cdnIndex;
-        return text;
+        return { content: text, cdnIndex };
       } catch (e) {
         GM_log(`⚠️ CDN ${cdnIndex + 1} 失败，尝试下一个`);
       }
@@ -386,9 +386,9 @@ var globalMonaco;
     GM_log(`❌ 所有CDN源失败`);
     if (cache) {
       GM_log(`⚠️ 使用过期缓存 ${libName}`);
-      return cache;
+      return { content: cache, cdnIndex: -1 };
     }
-    return getFallbackContent(libName);
+    return { content: getFallbackContent(libName), cdnIndex: -1 };
   }
 
   function waitForMonaco(target = unsafeWindow) {
@@ -427,16 +427,24 @@ var globalMonaco;
   }
 
   async function loadAllLibs() {
-    return Promise.all(
+    const results = await Promise.all(
       LIBS.map(async (libName) => {
         try {
           return [libName, await getLibContent(libName)];
         } catch (e) {
           GM_log(`❌ 处理 ${libName} 时出错: ${e.message}`);
-          return [libName, ""];
+          return [libName, { content: "", cdnIndex: -1 }];
         }
       })
     );
+    const lastSuccess = results
+      .map(([, r]) => r.cdnIndex)
+      .filter((i) => i >= 0)
+      .pop();
+    if (lastSuccess !== undefined) {
+      currentCDNIndex = lastSuccess;
+    }
+    return results.map(([libName, r]) => [libName, r.content]);
   }
 
   function updateEditorOptions(monaco) {
@@ -469,7 +477,6 @@ var globalMonaco;
     configuredMonacos.add(monaco);
 
     try {
-      globalMonaco = monaco;
       jsDefaults.addExtraLib(customLibs.trim(), "ts:custom-types.d.ts");
 
       jsDefaults.setDiagnosticsOptions({
@@ -498,7 +505,6 @@ var globalMonaco;
 
       updateEditorOptions(monaco);
       jsDefaults.setEagerModelSync(true);
-      jsDefaults.setDiagnosticsOptions(jsDefaults.getDiagnosticsOptions());
 
       GM_log(
         "✅【LeetCode 补全代码】 全部的功能已经就绪、试试输入 const ans = [], ans. 有没有补全 ~"
@@ -524,14 +530,12 @@ var globalMonaco;
       if (!monaco) {
         GM_log("❌ 失败：未找到Monaco编辑器");
         targetStates.delete(target);
-        stopWatching();
         return false;
       }
 
       const configured = await configureMonaco(monaco);
       if (!configured) {
         targetStates.delete(target);
-        stopWatching();
         return false;
       }
 
@@ -541,17 +545,13 @@ var globalMonaco;
     } catch (e) {
       GM_log("❌ 初始化出错：" + e.message);
       targetStates.delete(target);
-      stopWatching();
       return false;
     }
   }
 
   function detectMonacoInPage() {
-    let found = false;
-
     if (document?.querySelector(".monaco-editor")) {
       GM_log("发现主页面含有 Monaco！");
-      found = true;
       void enableJSCompletion(unsafeWindow);
     }
 
@@ -561,15 +561,12 @@ var globalMonaco;
         const doc = iframe.contentDocument;
         if (doc && doc.querySelector(".monaco-editor")) {
           GM_log("发现 IFrame 页面含有 Monaco！");
-          found = true;
           void enableJSCompletion(iframe.contentWindow);
         }
       } catch (e) {
         GM_log("检查iframe时出错（可能是跨域）：" + e.message);
       }
     }
-
-    return found;
   }
   GM_log("🚀 【LeetCode 补全代码】 插件准备加载了~");
 
