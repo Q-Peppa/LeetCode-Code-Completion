@@ -6,6 +6,7 @@
 // @author       Peppa
 // @license      MIT
 // @match        https://leetcode.cn/problems/*
+// @match        https://leetcode.com/problems/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=leetcode.cn
 // @run-at       document-end
 // @grant        GM_log
@@ -36,7 +37,12 @@ const fallbacks = {
     interface Window {
         document: Document;
     }`,
-  "lib.es5.d.ts": `interface Array<T> {
+  "lib.es5.d.ts": `type PropertyKey = string | number | symbol;
+    type Partial<T> = { [P in keyof T]?: T[P]; };
+    type Record<K extends PropertyKey, T> = { [P in K]: T; };
+    interface ConcatArray<T> { readonly length: number; readonly [n: number]: T; join(separator?: string): string; slice(start?: number, end?: number): T[]; }
+    interface PromiseLike<T> { then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): PromiseLike<TResult1 | TResult2>; }
+    interface Array<T> {
         forEach(callbackfn: (value: T, index: number, array: T[]) => void, thisArg?: any): void;
         map<U>(callbackfn: (value: T, index: number, array: T[]) => U, thisArg?: any): U[];
         filter(callbackfn: (value: T, index: number, array: T[]) => boolean, thisArg?: any): T[];
@@ -177,7 +183,6 @@ const options = {
     sticky: true,
   },
   renderErrors: true,
-  scrollBeyondLastLine: false,
 };
 const customLibs = `
  declare class PriorityQueue<T>{
@@ -193,6 +198,12 @@ const customLibs = `
   val: number;
   next: ListNode | null;
   constructor(val?: number, next?: ListNode | null);
+ }
+ declare class TreeNode {
+  val: number;
+  left: TreeNode | null;
+  right: TreeNode | null;
+  constructor(val?: number, left?: TreeNode | null, right?: TreeNode | null);
  }
  interface LoDashStatic {
         map<T, U>(array: T[], callback: (value: T, index: number, array: T[]) => U): U[];
@@ -293,6 +304,7 @@ const customLibs = `
   const editorListeners = new WeakSet();
   const timerIds = [];
   let observer = null;
+  let observerDebounce = null;
 
   function getCacheKey(libName = "") {
     return CACHE_KEY_PREFIX + libName;
@@ -316,6 +328,10 @@ const customLibs = `
   }
 
   function stopWatching() {
+    if (observerDebounce) {
+      clearTimeout(observerDebounce);
+      observerDebounce = null;
+    }
     if (observer) {
       observer.disconnect();
       observer = null;
@@ -427,24 +443,20 @@ const customLibs = `
   }
 
   async function loadAllLibs() {
-    const results = await Promise.all(
-      LIBS.map(async (libName) => {
-        try {
-          return [libName, await getLibContent(libName)];
-        } catch (e) {
-          GM_log(`❌ 处理 ${libName} 时出错: ${e.message}`);
-          return [libName, { content: "", cdnIndex: -1 }];
+    const results = [];
+    for (const libName of LIBS) {
+      try {
+        const { content, cdnIndex } = await getLibContent(libName);
+        if (cdnIndex >= 0) {
+          currentCDNIndex = cdnIndex;
         }
-      })
-    );
-    const lastSuccess = results
-      .map(([, r]) => r.cdnIndex)
-      .filter((i) => i >= 0)
-      .pop();
-    if (lastSuccess !== undefined) {
-      currentCDNIndex = lastSuccess;
+        results.push([libName, content]);
+      } catch (e) {
+        GM_log(`❌ 处理 ${libName} 时出错: ${e.message}`);
+        results.push([libName, ""]);
+      }
     }
-    return results.map(([libName, r]) => [libName, r.content]);
+    return results;
   }
 
   function updateEditorOptions(monaco) {
@@ -489,7 +501,6 @@ const customLibs = `
         allowJs: true,
         allowNonTsExtensions: true,
         target: monaco.languages.typescript.ScriptTarget?.ESNext ?? 99,
-        noImplicitAny: true,
         noEmit: true,
       });
 
@@ -540,7 +551,6 @@ const customLibs = `
       }
 
       targetStates.set(target, "configured");
-      stopWatching();
       return true;
     } catch (e) {
       GM_log("❌ 初始化出错：" + e.message);
@@ -571,7 +581,8 @@ const customLibs = `
   GM_log("🚀 【LeetCode 补全代码】 插件准备加载了~");
 
   observer = new MutationObserver(() => {
-    detectMonacoInPage();
+    if (observerDebounce) clearTimeout(observerDebounce);
+    observerDebounce = setTimeout(detectMonacoInPage, 300);
   });
 
   observer.observe(document, { childList: true, subtree: true });
